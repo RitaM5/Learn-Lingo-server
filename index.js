@@ -6,13 +6,13 @@ require('dotenv').config()
 const stripe = require('stripe')(process.env.PAYMENT_SECRET_KEY)
 const port = process.env.PORT || 5000;
 // //middleware
-// const corsConfig = {
-//   origin: '*',
-//   Credential: true,
-//   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']
-// }
-// middleware
-app.use(cors());
+const corsConfig = {
+  origin: '*',
+  Credential: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE']
+}
+app.use(cors(corsConfig));
+//app.use(cors());
 app.use(express.json());
 
 const verifyJWT = (req, res, next) => {
@@ -50,7 +50,7 @@ async function run() {
     // Connect the client to the server	(optional starting in v4.7)
     // await client.connect();
     const usersCollection = client.db("LearnLingoDB").collection("users");
-
+    const coursesCollection = client.db("LearnLingoDB").collection("classes");
     app.post('/jwt', (req, res) => {
       const user = req.body;
       const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' })
@@ -68,18 +68,31 @@ async function run() {
       next();
     }
     //get popular classes
-    app.get('/courses', async (req, res) => {
+    app.get('/classes', async (req, res) => {
+
       try {
-        const courses = usersCollection.find();
+        const courses = await coursesCollection.find().toArray();
         const sortedCourses = courses.sort((a, b) => b.enrolled - a.enrolled);
         const topCourses = sortedCourses.slice(0, 3);
         res.json(topCourses);
       }
       catch (error) {
-        console.error(error);
         res.status(500).json({ message: 'Server error' });
       }
-    })
+    });
+    //get popular instructors
+    app.get('/instructor', async (req, res) => {
+
+      try {
+        const courses = await coursesCollection.find().toArray();
+        const sortedCourses = courses.sort((a, b) => b.enrolled - a.enrolled);
+        const topCourses = sortedCourses.slice(0, 3);
+        res.json(topCourses);
+      }
+      catch (error) {
+        res.status(500).json({ message: 'Server error' });
+      }
+    });
     // users related apis
     app.get('/users', async (req, res) => {
       const result = await usersCollection.find().toArray();
