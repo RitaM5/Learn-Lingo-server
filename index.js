@@ -6,13 +6,20 @@ require('dotenv').config()
 const stripe = require('stripe')(process.env.PAYMENT_SECRET_KEY)
 const port = process.env.PORT || 5000;
 // //middleware
-const corsConfig = {
-  origin: '*',
-  Credential: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE']
-}
-app.use(cors(corsConfig));
-//app.use(cors());
+// const corsConfig = {
+//   origin: '*',
+//   Credential: true,
+//   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+//   allowedHeaders: ['Content-Type', 'Authorization'],
+// }
+// app.use(cors(corsConfig));
+// app.use((req, res, next) => {
+//   res.setHeader('Access-Control-Allow-Origin', '*');
+//   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE');
+//   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+//   next();
+// })
+app.use(cors());
 app.use(express.json());
 
 const verifyJWT = (req, res, next) => {
@@ -48,7 +55,7 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    // await client.connect();
+     //client.connect();
     const usersCollection = client.db("LearnLingoDB").collection("users");
     const coursesCollection = client.db("LearnLingoDB").collection("classes");
     app.post('/jwt', (req, res) => {
@@ -69,32 +76,20 @@ async function run() {
     }
     //get popular classes
     app.get('/classes', async (req, res) => {
-
-      try {
-        const courses = await coursesCollection.find().toArray();
-        const sortedCourses = courses.sort((a, b) => b.enrolled - a.enrolled);
-        const topCourses = sortedCourses.slice(0, 3);
-        res.json(topCourses);
-      }
-      catch (error) {
-        res.status(500).json({ message: 'Server error' });
-      }
+      const courses = await coursesCollection.find().toArray();
+      const sortedCourses = courses.sort((a, b) => b.enrolled - a.enrolled);
+      const topCourses = sortedCourses.slice(0, 3);
+      res.json(topCourses);
     });
     //get popular instructors
-    app.get('/instructor', async (req, res) => {
-
-      try {
-        const courses = await coursesCollection.find().toArray();
-        const sortedCourses = courses.sort((a, b) => b.enrolled - a.enrolled);
-        const topCourses = sortedCourses.slice(0, 3);
-        res.json(topCourses);
-      }
-      catch (error) {
-        res.status(500).json({ message: 'Server error' });
-      }
+    app.get('/instructors', async (req, res) => {
+      const instructors = await coursesCollection.find().toArray();
+      const sortedInstructors = instructors.sort((a, b) => b.enrolled - a.enrolled);
+      const topInstructor = sortedInstructors.slice(0, 3);
+      res.json(topInstructor);
     });
     // users related apis
-    app.get('/users', async (req, res) => {
+    app.get('/users', verifyJWT, verifyAdmin, async (req, res) => {
       const result = await usersCollection.find().toArray();
       res.send(result);
     });
@@ -113,7 +108,48 @@ async function run() {
       res.send(result);
     });
 
+    // security layer: verifyJWT
+    // email same
+    // check admin
+    app.get('/users/admin/:email', verifyJWT, async (req, res) => {
+      const email = req.params.email;
 
+      if (req.decoded.email !== email) {
+        res.send({ admin: false })
+      }
+
+      const query = { email: email }
+      const user = await usersCollection.findOne(query);
+      const result = { admin: user?.role === 'admin' }
+      res.send(result);
+    });
+
+    app.get('/users/instructor/:email', verifyJWT, async (req, res) => {
+      const email = req.params.email;
+
+      if (req.decoded.email !== email) {
+        res.send({ instructor: false })
+      }
+
+      const query = { email: email }
+      const user = await usersCollection.findOne(query);
+      const result = { instructor: user?.role === 'instructor' }
+      res.send(result);
+    });
+
+    app.patch('/users/admin/:id', async (req, res) => {
+      const id = req.params.id;
+      // console.log(id);
+      const filter = { _id: new ObjectId(id) };
+      const updateDoc = {
+        $set: {
+          role: "instructor"
+        },
+      };
+      const result = await usersCollection.updateOne(filter, updateDoc);
+      res.send(result);
+
+    });
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
