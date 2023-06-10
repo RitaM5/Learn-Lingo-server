@@ -102,7 +102,11 @@ async function run() {
       const result = await usersCollection.find().toArray();
       res.send(result);
     });
-
+    //classes api
+    app.get('/classes', verifyJWT, verifyAdmin, async (req, res) => {
+      const result = await coursesCollection.find().toArray();
+      res.send(result);
+    });
     app.post('/users', async (req, res) => {
       const user = req.body;
       console.log(user.email);
