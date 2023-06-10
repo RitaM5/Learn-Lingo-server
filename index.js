@@ -97,6 +97,7 @@ async function run() {
       const topInstructor = sortedInstructors.slice(0, 3);
       res.json(topInstructor);
     });
+    
     // users related apis
     app.get('/users', verifyJWT, verifyAdmin, async (req, res) => {
       const result = await usersCollection.find().toArray();
@@ -106,6 +107,12 @@ async function run() {
     app.get('/all-classes', verifyJWT, verifyAdmin, async (req, res) => {
       const result = await coursesCollection.find().toArray();
       res.send(result);
+    });
+    // my class for instructor api
+    app.get('/my-classes', verifyJWT, verifyInstructor, async (req, res) => {
+      const email = req.decoded.email;
+      const classes = await coursesCollection.find({ instructorEmail: email }).toArray();
+      res.json(classes);
     });
     app.post('/users', async (req, res) => {
       const user = req.body;
@@ -195,7 +202,7 @@ async function run() {
       const result = await coursesCollection.updateOne(filter, updateData);
       res.send(result);
     });
-    //for update approve data
+    //for update deny data
     app.put('/classes/deny/:id', async (req, res) => {
       const classId = req.params.id;
       const filter = { _id: new ObjectId(classId) }
