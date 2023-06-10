@@ -102,8 +102,8 @@ async function run() {
       const result = await usersCollection.find().toArray();
       res.send(result);
     });
-    //classes api
-    app.get('/classes', verifyJWT, verifyAdmin, async (req, res) => {
+    //all classes api
+    app.get('/all-classes', verifyJWT, verifyAdmin, async (req, res) => {
       const result = await coursesCollection.find().toArray();
       res.send(result);
     });
@@ -182,6 +182,30 @@ async function run() {
       const result = await usersCollection.updateOne(filter, updateDoc);
       res.send(result);
 
+    });
+    //for update approve data
+    app.put('/classes/approve/:id', async (req, res) => {
+      const classId = req.params.id;
+      const filter = {_id: new ObjectId(classId)}
+      const updateData = {
+        $set: {
+          status: 'approve'
+        }
+      }
+      const result = await coursesCollection.updateOne(filter, updateData);
+      res.send(result);
+    });
+     //for update approve data
+     app.put('/classes/deny/:id', async (req, res) => {
+      const classId = req.params.id;
+      const filter = {_id: new ObjectId(classId)}
+      const updateData = {
+        $set: {
+          status: 'denied'
+        }
+      }
+      const result = await coursesCollection.updateOne(filter, updateData);
+      res.send(result);
     });
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
