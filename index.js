@@ -186,7 +186,7 @@ async function run() {
     //for update approve data
     app.put('/classes/approve/:id', async (req, res) => {
       const classId = req.params.id;
-      const filter = {_id: new ObjectId(classId)}
+      const filter = { _id: new ObjectId(classId) }
       const updateData = {
         $set: {
           status: 'approve'
@@ -195,10 +195,10 @@ async function run() {
       const result = await coursesCollection.updateOne(filter, updateData);
       res.send(result);
     });
-     //for update approve data
-     app.put('/classes/deny/:id', async (req, res) => {
+    //for update approve data
+    app.put('/classes/deny/:id', async (req, res) => {
       const classId = req.params.id;
-      const filter = {_id: new ObjectId(classId)}
+      const filter = { _id: new ObjectId(classId) }
       const updateData = {
         $set: {
           status: 'denied'
@@ -206,6 +206,16 @@ async function run() {
       }
       const result = await coursesCollection.updateOne(filter, updateData);
       res.send(result);
+    });
+    //for sending feedback
+    app.post('/classes/feedback/:classId',async (req, res) => {
+      const classId = req.params.classId;
+      const feedback = req.body.feedback; 
+      const result = await coursesCollection.updateOne(
+        { _id: new ObjectId(classId) },
+        { $set: { feedback: feedback } }
+      );
+      res.send(result)
     });
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
