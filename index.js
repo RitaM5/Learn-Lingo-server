@@ -55,7 +55,7 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-     //client.connect();
+    //client.connect();
     const usersCollection = client.db("LearnLingoDB").collection("users");
     const coursesCollection = client.db("LearnLingoDB").collection("classes");
     app.post('/jwt', (req, res) => {
@@ -70,6 +70,15 @@ async function run() {
       const query = { email: email }
       const user = await usersCollection.findOne(query);
       if (user?.role !== 'admin') {
+        return res.status(403).send({ error: true, message: 'forbidden message' });
+      }
+      next();
+    }
+    const verifyInstructor = async (req, res, next) => {
+      const email = req.decoded.email;
+      const query = { email: email }
+      const user = await usersCollection.findOne(query);
+      if (user?.role !== 'instructor') {
         return res.status(403).send({ error: true, message: 'forbidden message' });
       }
       next();
@@ -107,10 +116,16 @@ async function run() {
       const result = await usersCollection.insertOne(user);
       res.send(result);
     });
-
+    // for add new class
+    app.post('/classes', verifyJWT, verifyInstructor, async (req, res) => {
+      const classes = req.body;
+      const result = await coursesCollection.insertOne(classes)
+      res.send(result);
+    })
     // security layer: verifyJWT
     // email same
     // check admin
+    //for useAdmin
     app.get('/users/admin/:email', verifyJWT, async (req, res) => {
       const email = req.params.email;
 
@@ -123,7 +138,7 @@ async function run() {
       const result = { admin: user?.role === 'admin' }
       res.send(result);
     });
-
+    //for useInstructor
     app.get('/users/instructor/:email', verifyJWT, async (req, res) => {
       const email = req.params.email;
 
@@ -136,7 +151,7 @@ async function run() {
       const result = { instructor: user?.role === 'instructor' }
       res.send(result);
     });
-
+    //for make instructor
     app.patch('/users/admin/:id', async (req, res) => {
       const id = req.params.id;
       // console.log(id);
