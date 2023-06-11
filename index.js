@@ -58,6 +58,7 @@ async function run() {
     //client.connect();
     const usersCollection = client.db("LearnLingoDB").collection("users");
     const coursesCollection = client.db("LearnLingoDB").collection("classes");
+    const selectedCollection = client.db("LearnLingoDB").collection("select");
     app.post('/jwt', (req, res) => {
       const user = req.body;
       const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' })
@@ -83,57 +84,103 @@ async function run() {
       }
       next();
     }
-    //get popular classes
+    //all classes
     app.get('/classes', async (req, res) => {
+      const result = await coursesCollection.find({ status: 'approve' }).toArray();
+      res.send(result);
+    });
+    //get popular classes
+    app.get('/popular-classes', async (req, res) => {
       const courses = await coursesCollection.find().toArray();
       const sortedCourses = courses.sort((a, b) => b.enrolled - a.enrolled);
       const topCourses = sortedCourses.slice(0, 3);
       res.json(topCourses);
     });
-    //get popular instructors
-    app.get('/instructors', async (req, res) => {
-      const instructors = await coursesCollection.find().toArray();
-      const sortedInstructors = instructors.sort((a, b) => b.enrolled - a.enrolled);
-      const topInstructor = sortedInstructors.slice(0, 3);
-      res.json(topInstructor);
-    });
-    
-    // users related apis
-    app.get('/users', verifyJWT, verifyAdmin, async (req, res) => {
-      const result = await usersCollection.find().toArray();
-      res.send(result);
-    });
-    //all classes api
+    //all classes api for admin pannel
     app.get('/all-classes', verifyJWT, verifyAdmin, async (req, res) => {
       const result = await coursesCollection.find().toArray();
       res.send(result);
     });
-    // my class for instructor api
+    // my class for instructors 
     app.get('/my-classes', verifyJWT, verifyInstructor, async (req, res) => {
       const email = req.decoded.email;
       const classes = await coursesCollection.find({ instructorEmail: email }).toArray();
       res.json(classes);
-    });
-    app.post('/users', async (req, res) => {
-      const user = req.body;
-      console.log(user.email);
-      const query = { email: user.email }
-      const existingUser = await usersCollection.findOne(query);
-
-      if (existingUser) {
-        return res.send({ message: 'user already exists' })
-      }
-
-      const result = await usersCollection.insertOne(user);
-      res.send(result);
     });
     // for add new class
     app.post('/classes', verifyJWT, verifyInstructor, async (req, res) => {
       const classes = req.body;
       const result = await coursesCollection.insertOne(classes)
       res.send(result);
-    })
-    // security layer: verifyJWT
+    });
+    //for update approve data
+    app.put('/classes/approve/:id', async (req, res) => {
+      const classId = req.params.id;
+      const filter = { _id: new ObjectId(classId) }
+      const updateData = {
+        $set: {
+          status: 'approve'
+        }
+      }
+      const result = await coursesCollection.updateOne(filter, updateData);
+      res.send(result);
+    });
+    //for update deny data
+    app.put('/classes/deny/:id', async (req, res) => {
+      const classId = req.params.id;
+      const filter = { _id: new ObjectId(classId) }
+      const updateData = {
+        $set: {
+          status: 'denied'
+        }
+      }
+      const result = await coursesCollection.updateOne(filter, updateData);
+      res.send(result);
+    });
+    //for sending feedback
+    app.post('/classes/feedback/:classId', async (req, res) => {
+      const classId = req.params.classId;
+      const feedback = req.body.feedback;
+      const result = await coursesCollection.updateOne(
+        { _id: new ObjectId(classId) },
+        { $set: { feedback: feedback } }
+      );
+      res.send(result)
+    });
+
+    //get popular instructors
+    app.get('/popular-instructors', async (req, res) => {
+      const instructors = await coursesCollection.find().toArray();
+      const sortedInstructors = instructors.sort((a, b) => b.enrolled - a.enrolled);
+      const topInstructor = sortedInstructors.slice(0, 3);
+      res.json(topInstructor);
+    });
+
+
+    //for instructors api
+    app.get('/all-instructors', async (req, res) => {
+      const instructors = await usersCollection.find({ role: 'instructor' }).toArray();
+      const courses = await coursesCollection.find().toArray();
+
+      const instructorData = instructors.map((instructor) => {
+        const coursesByInstructor = courses.filter((course) => course.instructorEmail === instructor.email);
+
+        return {
+          instructorImage: instructor.photoURL,
+          courses: coursesByInstructor
+        };
+      });
+
+      res.send(instructorData);
+    });
+
+    // users related apis
+    app.get('/users', verifyJWT, verifyAdmin, async (req, res) => {
+      const result = await usersCollection.find().toArray();
+      res.send(result);
+    });
+
+      // security layer: verifyJWT
     // email same
     // check admin
     //for useAdmin
@@ -162,6 +209,22 @@ async function run() {
       const result = { instructor: user?.role === 'instructor' }
       res.send(result);
     });
+
+    app.post('/users', async (req, res) => {
+      const user = req.body;
+      console.log(user.email);
+      const query = { email: user.email }
+      const existingUser = await usersCollection.findOne(query);
+
+      if (existingUser) {
+        return res.send({ message: 'user already exists' })
+      }
+
+      const result = await usersCollection.insertOne(user);
+      res.send(result);
+    });
+
+  
     //for make instructor
     app.patch('/users/constructor/:id', async (req, res) => {
       const id = req.params.id;
@@ -190,40 +253,15 @@ async function run() {
       res.send(result);
 
     });
-    //for update approve data
-    app.put('/classes/approve/:id', async (req, res) => {
-      const classId = req.params.id;
-      const filter = { _id: new ObjectId(classId) }
-      const updateData = {
-        $set: {
-          status: 'approve'
-        }
-      }
-      const result = await coursesCollection.updateOne(filter, updateData);
-      res.send(result);
-    });
-    //for update deny data
-    app.put('/classes/deny/:id', async (req, res) => {
-      const classId = req.params.id;
-      const filter = { _id: new ObjectId(classId) }
-      const updateData = {
-        $set: {
-          status: 'denied'
-        }
-      }
-      const result = await coursesCollection.updateOne(filter, updateData);
-      res.send(result);
-    });
-    //for sending feedback
-    app.post('/classes/feedback/:classId',async (req, res) => {
-      const classId = req.params.classId;
-      const feedback = req.body.feedback; 
-      const result = await coursesCollection.updateOne(
-        { _id: new ObjectId(classId) },
-        { $set: { feedback: feedback } }
-      );
-      res.send(result)
-    });
+//for select item stor database
+app.post('/select', async (req, res) => {
+  const item = req.body;
+  const result = await selectedCollection.insertOne(item);
+  res.send(result);
+})
+
+
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
