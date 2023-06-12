@@ -5,20 +5,7 @@ const jwt = require('jsonwebtoken');
 require('dotenv').config()
 const stripe = require('stripe')(process.env.PAYMENT_SECRET_KEY)
 const port = process.env.PORT || 5000;
-// //middleware
-// const corsConfig = {
-//   origin: '*',
-//   Credential: true,
-//   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-//   allowedHeaders: ['Content-Type', 'Authorization'],
-// }
-// app.use(cors(corsConfig));
-// app.use((req, res, next) => {
-//   res.setHeader('Access-Control-Allow-Origin', '*');
-//   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE');
-//   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-//   next();
-// })
+
 app.use(cors());
 app.use(express.json());
 
@@ -159,25 +146,25 @@ async function run() {
       //
       try {
         const courses = await coursesCollection.find().toArray();
-    
+
         const instructors = [];
         const instructorEmails = courses.map(course => course.instructorEmail);
-    
+
         for (const email of instructorEmails) {
           const instructor = await usersCollection.findOne({ email, role: 'instructor' });
           if (instructor) {
             instructors.push(instructor);
           }
         }
-    
+
         const sortedInstructors = instructors.sort((a, b) => {
           const enrolledA = courses.find(course => course.instructorEmail === a.email)?.enrolled || 0;
           const enrolledB = courses.find(course => course.instructorEmail === b.email)?.enrolled || 0;
           return enrolledB - enrolledA;
         });
-    
+
         const topInstructors = sortedInstructors.slice(0, 6);
-    
+
         const instructorsWithCourses = topInstructors.map(instructor => {
           const instructorCourses = courses.filter(course => course.instructorEmail === instructor.email);
           const courseInfo = instructorCourses.map(course => {
@@ -186,7 +173,7 @@ async function run() {
               enrolled: course.enrolled
             };
           });
-    
+
           return {
             name: instructor.name,
             email: instructor.email,
@@ -194,13 +181,13 @@ async function run() {
             courses: courseInfo
           };
         });
-    
+
         res.json(instructorsWithCourses);
       } catch (err) {
         console.log('Error retrieving popular instructors:', err);
         res.status(500).send('Error retrieving popular instructors');
       }
-      
+
     });
 
     //for instructors api
@@ -353,6 +340,17 @@ async function run() {
         clientSecret: paymentIntent.client_secret
       })
     })
+    //for enrolled class
+    app.get('/payments/classes', verifyJWT, async (req, res) => {
+      const result = await paymentCollection.find().toArray();
+      res.send(result);
+    });
+
+    //payment history
+    app.get('/payments/history', verifyJWT, async (req, res) => {
+      const paymentHistory = await paymentCollection.find().sort({ date: -1 }).toArray();
+      res.send(paymentHistory);
+    });
 
     app.post('/payments', verifyJWT, async (req, res) => {
       try {
