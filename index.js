@@ -59,6 +59,7 @@ async function run() {
     const usersCollection = client.db("LearnLingoDB").collection("users");
     const coursesCollection = client.db("LearnLingoDB").collection("classes");
     const selectedCollection = client.db("LearnLingoDB").collection("select");
+    const paymentCollection = client.db("LearnLingoDB").collection("payments")
     app.post('/jwt', (req, res) => {
       const user = req.body;
       const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' })
@@ -89,11 +90,12 @@ async function run() {
       const result = await coursesCollection.find({ status: 'approve' }).toArray();
       res.send(result);
     });
+
     //get popular classes
     app.get('/popular-classes', async (req, res) => {
       const courses = await coursesCollection.find().toArray();
       const sortedCourses = courses.sort((a, b) => b.enrolled - a.enrolled);
-      const topCourses = sortedCourses.slice(0, 3);
+      const topCourses = sortedCourses.slice(0, 6);
       res.json(topCourses);
     });
     //all classes api for admin pannel
@@ -150,12 +152,56 @@ async function run() {
 
     //get popular instructors
     app.get('/popular-instructors', async (req, res) => {
-      const instructors = await coursesCollection.find().toArray();
-      const sortedInstructors = instructors.sort((a, b) => b.enrolled - a.enrolled);
-      const topInstructor = sortedInstructors.slice(0, 3);
-      res.json(topInstructor);
+      //   const instructors = await coursesCollection.find().toArray();
+      //   const sortedInstructors = instructors.sort((a, b) => b.enrolled - a.enrolled);
+      //   const topInstructor = sortedInstructors.slice(0, 6);
+      //   res.json(topInstructor);
+      //
+      try {
+        const courses = await coursesCollection.find().toArray();
+    
+        const instructors = [];
+        const instructorEmails = courses.map(course => course.instructorEmail);
+    
+        for (const email of instructorEmails) {
+          const instructor = await usersCollection.findOne({ email, role: 'instructor' });
+          if (instructor) {
+            instructors.push(instructor);
+          }
+        }
+    
+        const sortedInstructors = instructors.sort((a, b) => {
+          const enrolledA = courses.find(course => course.instructorEmail === a.email)?.enrolled || 0;
+          const enrolledB = courses.find(course => course.instructorEmail === b.email)?.enrolled || 0;
+          return enrolledB - enrolledA;
+        });
+    
+        const topInstructors = sortedInstructors.slice(0, 6);
+    
+        const instructorsWithCourses = topInstructors.map(instructor => {
+          const instructorCourses = courses.filter(course => course.instructorEmail === instructor.email);
+          const courseInfo = instructorCourses.map(course => {
+            return {
+              className: course.className,
+              enrolled: course.enrolled
+            };
+          });
+    
+          return {
+            name: instructor.name,
+            email: instructor.email,
+            photoURL: instructor.photoURL,
+            courses: courseInfo
+          };
+        });
+    
+        res.json(instructorsWithCourses);
+      } catch (err) {
+        console.log('Error retrieving popular instructors:', err);
+        res.status(500).send('Error retrieving popular instructors');
+      }
+      
     });
-
 
     //for instructors api
     app.get('/all-instructors', async (req, res) => {
@@ -180,7 +226,7 @@ async function run() {
       res.send(result);
     });
 
-      // security layer: verifyJWT
+    // security layer: verifyJWT
     // email same
     // check admin
     //for useAdmin
@@ -224,7 +270,7 @@ async function run() {
       res.send(result);
     });
 
-  
+
     //for make instructor
     app.patch('/users/constructor/:id', async (req, res) => {
       const id = req.params.id;
@@ -253,14 +299,84 @@ async function run() {
       res.send(result);
 
     });
-//for select item stor database
-app.post('/select', async (req, res) => {
-  const item = req.body;
-  const result = await selectedCollection.insertOne(item);
-  res.send(result);
-})
+
+    //for my selected class
+    app.get('/select/:id', async (req, res) => {
+      const itemId = req.params.id;
+      console.log(itemId);
+      const item = await selectedCollection.findOne({ _id: new ObjectId(itemId) });
+      res.send(item);
+    });
 
 
+    app.get('/select', verifyJWT, async (req, res) => {
+      const email = req.query.email;
+
+      if (!email) {
+        res.send([]);
+      }
+
+      const decodedEmail = req.decoded.email;
+      if (email !== decodedEmail) {
+        return res.status(403).send({ error: true, message: 'forbidden access' })
+      }
+
+      const query = { email: email };
+      const result = await selectedCollection.find(query).toArray();
+      res.send(result);
+    });
+
+    //for select item stor database
+    app.post('/select', async (req, res) => {
+      const item = req.body;
+      const result = await selectedCollection.insertOne(item);
+      res.send(result);
+    })
+
+    app.delete('/select/:id', async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await selectedCollection.deleteOne(query);
+      res.send(result);
+    })
+    // create payment intent
+    app.post('/create-payment', verifyJWT, async (req, res) => {
+      const { price } = req.body;
+      const amount = parseInt(price * 100);
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amount,
+        currency: 'usd',
+        payment_method_types: ['card']
+      });
+
+      res.send({
+        clientSecret: paymentIntent.client_secret
+      })
+    })
+
+    app.post('/payments', verifyJWT, async (req, res) => {
+      try {
+        const payment = req.body;
+        const insertResult = await paymentCollection.insertOne(payment);
+        const itemId = payment.selectItems;
+        const classId = payment.classItems;
+        console.log(classId);
+        const deleteResult = await selectedCollection.deleteOne({ _id: new ObjectId(itemId) });
+        const query = { _id: new ObjectId(classId) };
+        const update = { $inc: { seats: -1, enrolled: 1 } };
+        const courseUpdateResult = await coursesCollection.updateOne(query, update);
+
+        if (courseUpdateResult.acknowledged) {
+          res.send({ insertResult, deleteResult, acknowledged: courseUpdateResult.acknowledged });
+          console.log({ insertResult, deleteResult, acknowledged: courseUpdateResult.acknowledged });
+        } else {
+          throw new Error('Error updating seats and enrolled count');
+        }
+      } catch (err) {
+        console.error('Error updating seats and enrolled count:', err);
+        res.status(500).send('Error updating seats and enrolled count');
+      }
+    });
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
