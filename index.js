@@ -136,7 +136,21 @@ async function run() {
       );
       res.send(result)
     });
-
+    //update class from instructor
+    app.put("/classes/update/:id", async (req, res) => {
+      const id = req.params.id;
+      const body = req.body;
+      const options = { upsert: true };
+      const filter = { _id: new ObjectId(id) };
+      const updateData = {
+        $set: {
+          price: body.price,
+          seats: body.seats,
+        },
+      };
+      const result = await coursesCollection.updateOne(filter, updateData, options);
+      res.send(result);
+    });
     //get popular instructors
     app.get('/popular-instructors', async (req, res) => {
       //   const instructors = await coursesCollection.find().toArray();
