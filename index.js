@@ -341,14 +341,26 @@ async function run() {
       })
     })
     //for enrolled class
-    app.get('/payments/classes', verifyJWT, async (req, res) => {
-      const result = await paymentCollection.find().toArray();
-      res.send(result);
+    // app.get('/payments/classes', verifyJWT, async (req, res) => {
+    //   const result = await paymentCollection.find().toArray();
+    //   res.send(result);
+    // });
+    app.get('/payments/:email', verifyJWT, async (req, res) => {
+      try {
+        const email = req.params.email;
+        const query = { email: email };
+        const result = await paymentCollection.find(query).toArray();
+        res.send(result);
+      } catch (error) {
+        console.error('Error retrieving payment data:', error);
+        res.status(500).send('Error retrieving payment data');
+      }
     });
-
     //payment history
-    app.get('/payments/history', verifyJWT, async (req, res) => {
-      const paymentHistory = await paymentCollection.find().sort({ date: -1 }).toArray();
+    app.get('/payments/history/:email', verifyJWT, async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
+      const paymentHistory = await paymentCollection.find(query).sort({ date: -1 }).toArray();
       res.send(paymentHistory);
     });
 
